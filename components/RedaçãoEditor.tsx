@@ -10,105 +10,106 @@ import { ALTURA_LINHA_PX, LINHAS_MAX } from "@/types/redacao";
 import ContadorStatus from "./ContadorStatus";
 
 interface RedacaoEditorProps {
-  tema?: string;
-  textoInicial?: string;
+  tema: string;
+  setTema: (t: string) => void;
+  texto: string;
+  setTexto: (t: string) => void;
 }
 
-/**
- * Editor que simula a folha de redação do ENEM.
- *
- * Estratégia de contagem de linhas:
- * - Existe um <div> "espelho" invisível com as mesmas propriedades CSS
- *   do textarea (fonte, tamanho, line-height, padding, largura).
- * - A cada mudança no texto, jogamos o conteúdo no espelho e medimos
- *   scrollHeight / lineHeight → temos as linhas visuais reais.
- * - Se passar de 30 linhas, reverter para o texto anterior.
- */
 export default function RedacaoEditor({
-  tema = "",
-  textoInicial = "",
+  tema,
+  setTema,
+  texto,
+  setTexto,
 }: RedacaoEditorProps) {
-  const [texto, setTexto] = useState(textoInicial);
   const [linhas, setLinhas] = useState(0);
   const [mensagemLimite, setMensagemLimite] = useState("");
 
-  // Refs para o textarea e para o espelho
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
 
-  // Guardamos o último texto válido (dentro do limite) para reverter se precisar
-  const ultimoTextoValidoRef = useRef(textoInicial);
+  // Guarda o último texto válido para reverter quando o usuário ultrapassar 30 linhas
+  const ultimoTextoValidoRef = useRef(texto);
+
+  // Flag: só revertemos o texto se o usuário estiver editando.
+  // Ao carregar uma redação existente, não queremos "cortar" o texto dela.
+  const isInicializandoRef = useRef(true);
+
+  useEffect(() => {
+    // Após o primeiro render, consideramos que a inicialização acabou
+    const t = setTimeout(() => {
+      isInicializandoRef.current = false;
+    }, 50);
+    return () => clearTimeout(t);
+  }, []);
 
   /**
-   * Recalcula linhas, palavras e caracteres.
-   * Usamos useCallback para evitar recriar a função a cada render.
+   * Calcula quantas linhas o texto ocupa no espelho.
+   * Não modifica o texto — apenas lê.
    */
-  const recalcular = useCallback(() => {
-    if (!mirrorRef.current) return;
-
-    const novasLinhas = contarLinhas(texto, mirrorRef.current);
-    const palavras = contarPalavras(texto);
-    const caracteres = contarCaracteres(texto);
-
-    // Se ultrapassou o limite, reverter para o último texto válido
-    if (novasLinhas > LINHAS_MAX) {
-      setTexto(ultimoTextoValidoRef.current);
-      setMensagemLimite("Limite de 30 linhas atingido.");
-      // Limpa a mensagem após 2,5s
-      setTimeout(() => setMensagemLimite(""), 2500);
-      return;
-    }
-
-    setMensagemLimite("");
-    setLinhas(novasLinhas);
-    ultimoTextoValidoRef.current = texto;
-
-    // Atualizamos palavras/caracteres via estado derivado (useMemo abaixo)
-    // mas precisamos forçar um re-render com as linhas:
-    // (as outras métricas são calculadas no useMemo)
-    void palavras;
-    void caracteres;
+  const calcularLinhasAtual = useCallback(() => {
+    if (!mirrorRef.current) return 0;
+    return contarLinhas(texto, mirrorRef.current);
   }, [texto]);
 
   useEffect(() => {
-    recalcular();
-  }, [recalcular]);
+    if (!mirrorRef.current) return;
 
-  // Sincroniza a largura do espelho com a do textarea (importante em resize)
+    const novasLinhas = calcularLinhasAtual();
+      const frameId = requestAnimationFrame(() => {
+        if (novasLinhas > LINHAS_MAX) {
+          // Se ainda estamos inicializando (carregando redação), apenas avisamos
+          if (isInicializandoRef.current) {
+            setLinhas(novasLinhas);
+            setMensagemLimite(
+              `Esta redação tem ${novasLinhas} linhas (acima do limite de 30).`
+            );
+            return;
+          }
+          // Se o usuário está digitando, revertemos para o último texto válido
+          setTexto(ultimoTextoValidoRef.current);
+          setMensagemLimite("Limite de 30 linhas atingido.");
+          setTimeout(() => setMensagemLimite(""), 2500);
+          return;
+        }
+
+        setMensagemLimite(" ");
+        setLinhas(novasLinhas);
+        ultimoTextoValidoRef.current = texto;
+      });
+
+      return () => cancelAnimationFrame(frameId);
+  }, [texto, calcularLinhasAtual, setTexto]);
+
+  // Sincroniza largura do espelho com a do textarea
   useEffect(() => {
     const textarea = textareaRef.current;
     const mirror = mirrorRef.current;
     if (!textarea || !mirror) return;
 
-    const sincronizarLargura = () => {
-      // Descontamos padding e border para ter a largura interna real
+    const sincronizar = () => {
       const estilo = getComputedStyle(textarea);
       const paddingH =
         parseFloat(estilo.paddingLeft) + parseFloat(estilo.paddingRight);
       const borderH =
-        parseFloat(estilo.borderLeftWidth) +
-        parseFloat(estilo.borderRightWidth);
+        parseFloat(estilo.borderLeftWidth) + parseFloat(estilo.borderRightWidth);
       mirror.style.width = `${textarea.clientWidth - paddingH - borderH}px`;
-      recalcular();
     };
 
-    const ro = new ResizeObserver(sincronizarLargura);
+    const ro = new ResizeObserver(sincronizar);
     ro.observe(textarea);
-    sincronizarLargura();
-
+    sincronizar();
     return () => ro.disconnect();
-  }, [recalcular]);
+  }, []);
 
-  // Métricas derivadas (recalculadas automaticamente quando 'texto' muda)
   const palavras = useMemo(() => contarPalavras(texto), [texto]);
   const caracteres = useMemo(() => contarCaracteres(texto), [texto]);
 
-  // Linhas do rascunho (30 linhas visuais na folha)
   const linhasRascunho = Array.from({ length: LINHAS_MAX }, (_, i) => i + 1);
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Tema */}
+      {/* Tema editável */}
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <label className="mb-1 block text-sm font-medium text-slate-700">
           Tema da redação
@@ -116,16 +117,16 @@ export default function RedacaoEditor({
         <input
           type="text"
           value={tema}
-          readOnly
-          placeholder="Definir desafios da educação brasileira no século XXI"
-          className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-800 outline-none focus:border-blue-400"
+          onChange={(e) => setTema(e.target.value)}
+          placeholder="Ex: Desafios da educação brasileira no século XXI"
+          className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white"
         />
       </div>
 
       {/* Folha de redação */}
       <div className="relative rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="relative overflow-hidden rounded-md border border-slate-300 bg-white">
-          {/* Linhas de fundo (pauta) */}
+          {/* Pauta (linhas horizontais) */}
           <div
             className="pointer-events-none absolute inset-0"
             style={{
@@ -143,21 +144,20 @@ export default function RedacaoEditor({
           {/* Números das linhas */}
           <div
             className="pointer-events-none absolute left-0 top-0 flex flex-col select-none"
-            style={{ lineHeight: `${ALTURA_LINHA_PX}px` }}
             aria-hidden
           >
             {linhasRascunho.map((n) => (
               <div
                 key={n}
                 className="px-2 text-right text-xs text-slate-400"
-                style={{ height: ALTURA_LINHA_PX }}
+                style={{ height: ALTURA_LINHA_PX, lineHeight: `${ALTURA_LINHA_PX}px` }}
               >
                 {n}
               </div>
             ))}
           </div>
 
-          {/* Textarea real (fica por cima das linhas) */}
+          {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={texto}
@@ -168,7 +168,6 @@ export default function RedacaoEditor({
             style={{
               lineHeight: `${ALTURA_LINHA_PX}px`,
               minHeight: ALTURA_LINHA_PX * LINHAS_MAX,
-              // fontFamily e fontSize DEVEM ser iguais aos do espelho
               fontFamily:
                 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
               fontSize: "16px",
@@ -177,7 +176,7 @@ export default function RedacaoEditor({
             }}
           />
 
-          {/* Div espelho (invisível) — usado APENAS para medir linhas */}
+          {/* Espelho invisível para medir linhas */}
           <div
             ref={mirrorRef}
             aria-hidden
@@ -187,14 +186,12 @@ export default function RedacaoEditor({
               fontFamily:
                 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
               fontSize: "16px",
-              // padding deve ser 0 para a medição ser precisa
               padding: 0,
               margin: 0,
             }}
           />
         </div>
 
-        {/* Mensagem de limite */}
         {mensagemLimite && (
           <div className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
             {mensagemLimite}
@@ -202,12 +199,7 @@ export default function RedacaoEditor({
         )}
       </div>
 
-      {/* Contadores */}
-      <ContadorStatus
-        linhas={linhas}
-        palavras={palavras}
-        caracteres={caracteres}
-      />
+      <ContadorStatus linhas={linhas} palavras={palavras} caracteres={caracteres} />
     </div>
   );
 }
