@@ -3,32 +3,51 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { RedacaoResumo } from "@/types/redacao";
-import { excluirRedacao, listarResumos } from "@/lib/storage";
+import { excluirRedacao, listarResumos } from "@/lib/api";
 import HistoricoRedacoes from "@/components/HistoricoRedacoes";
 import ModalConfirmacao from "@/components/ModalConfirmacao";
 import Toast from "@/components/Toast";
 
 export default function Home() {
   const [redacoes, setRedacoes] = useState<RedacaoResumo[]>([]);
+  const [carregando, setCarregando] = useState(true);
   const [idExcluir, setIdExcluir] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
-  // Carrega a lista ao montar
-  const carregar = useCallback(() => {
-    setRedacoes(listarResumos());
+  const carregar = useCallback(async () => {
+    setErro(null);
+    try {
+      setRedacoes(await listarResumos());
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Erro ao carregar redações.");
+    } finally {
+      setCarregando(false);
+    }
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(carregar, 0);
+    const t = setTimeout(() => {
+      void carregar();
+    }, 0);
     return () => clearTimeout(t);
   }, [carregar]);
 
-  const confirmarExclusao = () => {
+  const confirmarExclusao = async () => {
     if (!idExcluir) return;
-    excluirRedacao(idExcluir);
-    setIdExcluir(null);
-    setToast("Redação excluída.");
-    carregar();
+
+    try {
+      const ok = await excluirRedacao(idExcluir);
+      setIdExcluir(null);
+      setToast(ok ? "Redação excluída." : "Erro ao excluir redação.");
+      if (ok) {
+        await carregar();
+      }
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : "Erro ao excluir redação."
+      );
+    }
   };
 
   const redacaoSelecionada = redacoes.find((r) => r.id === idExcluir);
@@ -52,12 +71,23 @@ export default function Home() {
         </Link>
       </header>
 
-      <HistoricoRedacoes
-        redacoes={redacoes}
-        onExcluir={(id) => setIdExcluir(id)}
-      />
+      {erro && (
+        <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          {erro}
+        </div>
+      )}
 
-      {/* Modal de confirmação */}
+      {carregando ? (
+        <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500">
+          Carregando redações...
+        </div>
+      ) : (
+        <HistoricoRedacoes
+          redacoes={redacoes}
+          onExcluir={(id) => setIdExcluir(id)}
+        />
+      )}
+
       <ModalConfirmacao
         aberto={idExcluir !== null}
         titulo="Excluir redação"
@@ -69,7 +99,6 @@ export default function Home() {
         onCancelar={() => setIdExcluir(null)}
       />
 
-      {/* Toast */}
       {toast && <Toast mensagem={toast} onFechar={() => setToast(null)} />}
     </main>
   );

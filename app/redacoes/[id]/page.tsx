@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { Suspense } from "react";
-import RedacaoEditor from "@/components/RedacaoEditor";
+import RedacaoEditor from "@/components/RedaçãoEditor";
+import CorrecaoCompetencias from "@/components/CorrecaoCompetencias";
 import Toast from "@/components/Toast";
 import {
   contarCaracteres,
   contarLinhas,
   contarPalavras,
 } from "@/lib/calculos";
-import { atualizarRedacao, buscarPorId } from "@/lib/storage";
-import { LINHAS_MAX } from "@/types/redacao";
+import { atualizarRedacao, buscarPorId, listarCompetencias } from "@/lib/api";
+import { Competencia, LINHAS_MAX } from "@/types/redacao";
 
 function EditorInterno() {
   const router = useRouter();
@@ -21,28 +21,35 @@ function EditorInterno() {
 
   const [tema, setTema] = useState("");
   const [texto, setTexto] = useState("");
+  const [competencias, setCompetencias] = useState<Competencia[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
-  // Carrega a redação ao montar
   useEffect(() => {
-    const t = setTimeout(() => {
-      const r = buscarPorId(id);
-      if (!r) {
+    (async () => {
+      try {
+        const [r, competenciasSalvas] = await Promise.all([
+          buscarPorId(id),
+          listarCompetencias(id),
+        ]);
+        if (!r) {
+          setErro("Redação não encontrada.");
+          return;
+        }
+        setTema(r.tema);
+        setTexto(r.texto);
+        setCompetencias(competenciasSalvas);
+      } catch (e) {
+        setErro(e instanceof Error ? e.message : "Erro ao carregar.");
+      } finally {
         setCarregando(false);
-        setErro("Redação não encontrada.");
-        return;
       }
-      setTema(r.tema);
-      setTexto(r.texto);
-      setCarregando(false);
-    }, 0);
-
-    return () => clearTimeout(t);
+    })();
   }, [id]);
 
-  const salvar = () => {
+  const salvar = async () => {
     setErro(null);
 
     if (!tema.trim()) {
@@ -54,7 +61,6 @@ function EditorInterno() {
       return;
     }
 
-    // Mede linhas usando mirror temporário
     const mirror = document.createElement("div");
     mirror.style.position = "absolute";
     mirror.style.visibility = "hidden";
@@ -92,21 +98,26 @@ function EditorInterno() {
 
     const palavras = contarPalavras(texto);
     const caracteres = contarCaracteres(texto);
-
     const titulo =
       tema.trim().length > 60 ? tema.trim().slice(0, 57) + "..." : tema.trim();
 
-    atualizarRedacao(id, {
-      titulo,
-      tema: tema.trim(),
-      texto,
-      quantidade_linhas: linhas,
-      quantidade_palavras: palavras,
-      quantidade_caracteres: caracteres,
-    });
-
-    setToast("Redação atualizada!");
-    setTimeout(() => router.push("/"), 800);
+    setSalvando(true);
+    try {
+      await atualizarRedacao(id, {
+        titulo,
+        tema: tema.trim(),
+        texto,
+        quantidade_linhas: linhas,
+        quantidade_palavras: palavras,
+        quantidade_caracteres: caracteres,
+      });
+      setToast("Redação atualizada!");
+      setTimeout(() => router.push("/"), 800);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao salvar.");
+    } finally {
+      setSalvando(false);
+    }
   };
 
   if (carregando) {
@@ -142,9 +153,10 @@ function EditorInterno() {
         </h1>
         <button
           onClick={salvar}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+          disabled={salvando}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
         >
-          Salvar alterações
+          {salvando ? "Salvando..." : "Salvar alterações"}
         </button>
       </header>
 
@@ -161,12 +173,17 @@ function EditorInterno() {
         setTexto={setTexto}
       />
 
+      <CorrecaoCompetencias
+        redacaoId={id}
+        competenciasIniciais={competencias}
+        onSalvo={(notaFinal) => setToast(`Correção salva: ${notaFinal} / 1000`)}
+      />
+
       {toast && <Toast mensagem={toast} onFechar={() => setToast(null)} />}
     </main>
   );
 }
 
-// useSearchParams exige Suspense boundary no Next.js
 export default function EditarRedacaoPage() {
   return (
     <Suspense

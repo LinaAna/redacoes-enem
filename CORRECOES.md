@@ -22,3 +22,14 @@ Foram corrigidos avisos da regra `react-hooks/set-state-in-effect` nos seguintes
 ## Validacao
 
 O comando `npm.cmd run lint` foi executado com sucesso, sem erros.
+
+## Etapa 4 - Competências
+
+- Criado o handler `app/api/redacoes/[id]/competencias/route.ts`.
+- Criado o formulário `components/CorrecaoCompetencias.tsx`.
+- Adicionadas as funções de competências em `lib/api.ts`.
+- Integrado o carregamento e salvamento da correção em `app/redacoes/[id]/page.tsx`.
+- A nota final é calculada pela soma das cinco competências e salva em `redacoes.nota_final`.
+- As pastas das rotas dinâmicas foram corrigidas para usar o padrão `[id]` do Next.js.
+
+O comando `npm.cmd run build` também foi executado com sucesso.
