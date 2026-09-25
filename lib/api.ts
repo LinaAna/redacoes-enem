@@ -1,4 +1,9 @@
-import { Competencia, Redacao, RedacaoResumo } from "@/types/redacao";
+import {
+  Competencia,
+  EstatisticasRedacoes,
+  Redacao,
+  RedacaoResumo,
+} from "@/types/redacao";
 
 /**
  * Camada de API do frontend.
@@ -59,10 +64,14 @@ export async function excluirRedacao(id: string): Promise<boolean> {
   const res = await fetch(`/api/redacoes/${id}`, {
     method: "DELETE",
   });
-  return res.ok;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.erro || "Erro ao excluir redação.");
+  }
+  return true;
 }
 
-export async function listarCompetencias(id: string): Promise<Competencia[]> {
+export async function buscarCompetencias(id: string): Promise<Competencia[]> {
   const res = await fetch(`/api/redacoes/${id}/competencias`, {
     cache: "no-store",
   });
@@ -72,6 +81,8 @@ export async function listarCompetencias(id: string): Promise<Competencia[]> {
   }
   return res.json();
 }
+
+export const listarCompetencias = buscarCompetencias;
 
 export async function salvarCompetencias(
   id: string,
@@ -85,6 +96,15 @@ export async function salvarCompetencias(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.erro || "Erro ao salvar competências.");
+  }
+  return res.json();
+}
+
+export async function buscarEstatisticas(): Promise<EstatisticasRedacoes> {
+  const res = await fetch("/api/estatisticas", { cache: "no-store" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.erro || "Erro ao carregar estatísticas.");
   }
   return res.json();
 }

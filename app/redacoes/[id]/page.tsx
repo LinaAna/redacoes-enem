@@ -30,17 +30,18 @@ function EditorInterno() {
   useEffect(() => {
     (async () => {
       try {
-        const [r, competenciasSalvas] = await Promise.all([
-          buscarPorId(id),
-          listarCompetencias(id),
-        ]);
+        const r = await buscarPorId(id);
         if (!r) {
           setErro("Redação não encontrada.");
           return;
         }
         setTema(r.tema);
         setTexto(r.texto);
-        setCompetencias(competenciasSalvas);
+        try {
+          setCompetencias(await listarCompetencias(id));
+        } catch (e) {
+          setErro(e instanceof Error ? e.message : "Erro ao carregar competências.");
+        }
       } catch (e) {
         setErro(e instanceof Error ? e.message : "Erro ao carregar.");
       } finally {
@@ -72,7 +73,7 @@ function EditorInterno() {
     mirror.style.lineHeight = "32px";
     mirror.style.padding = "0";
 
-    const textarea = document.querySelector("textarea");
+    const textarea = document.getElementById("redacao-texto");
     if (textarea) {
       const estilo = getComputedStyle(textarea);
       const paddingH =

@@ -27,21 +27,11 @@ export default function RedacaoEditor({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
+  const larguraRef = useRef(0);
+  const digitandoRef = useRef(false);
 
   // Guarda o último texto válido para reverter quando o usuário ultrapassar 30 linhas
   const ultimoTextoValidoRef = useRef(texto);
-
-  // Flag: só revertemos o texto se o usuário estiver editando.
-  // Ao carregar uma redação existente, não queremos "cortar" o texto dela.
-  const isInicializandoRef = useRef(true);
-
-  useEffect(() => {
-    // Após o primeiro render, consideramos que a inicialização acabou
-    const t = setTimeout(() => {
-      isInicializandoRef.current = false;
-    }, 50);
-    return () => clearTimeout(t);
-  }, []);
 
   /**
    * Calcula quantas linhas o texto ocupa no espelho.
@@ -55,30 +45,25 @@ export default function RedacaoEditor({
   useEffect(() => {
     if (!mirrorRef.current) return;
 
-    const novasLinhas = calcularLinhasAtual();
-      const frameId = requestAnimationFrame(() => {
-        if (novasLinhas > LINHAS_MAX) {
-          // Se ainda estamos inicializando (carregando redação), apenas avisamos
-          if (isInicializandoRef.current) {
-            setLinhas(novasLinhas);
-            setMensagemLimite(
-              `Esta redação tem ${novasLinhas} linhas (acima do limite de 30).`
-            );
-            return;
-          }
-          // Se o usuário está digitando, revertemos para o último texto válido
-          setTexto(ultimoTextoValidoRef.current);
-          setMensagemLimite("Limite de 30 linhas atingido.");
-          setTimeout(() => setMensagemLimite(""), 2500);
-          return;
-        }
-
-        setMensagemLimite(" ");
-        setLinhas(novasLinhas);
+    const frameId = requestAnimationFrame(() => {
+      const novasLinhas = calcularLinhasAtual();
+      setLinhas(novasLinhas);
+      if (novasLinhas > LINHAS_MAX && digitandoRef.current) {
+        setTexto(ultimoTextoValidoRef.current);
+        setMensagemLimite("Limite de 30 linhas atingido.");
+        window.setTimeout(() => setMensagemLimite(""), 2500);
+      } else {
+        digitandoRef.current = false;
         ultimoTextoValidoRef.current = texto;
-      });
+        setMensagemLimite(
+          novasLinhas > LINHAS_MAX
+            ? `Esta redação tem ${novasLinhas} linhas (limite de ${LINHAS_MAX}).`
+            : ""
+        );
+      }
+    });
 
-      return () => cancelAnimationFrame(frameId);
+    return () => cancelAnimationFrame(frameId);
   }, [texto, calcularLinhasAtual, setTexto]);
 
   // Sincroniza largura do espelho com a do textarea
@@ -93,14 +78,25 @@ export default function RedacaoEditor({
         parseFloat(estilo.paddingLeft) + parseFloat(estilo.paddingRight);
       const borderH =
         parseFloat(estilo.borderLeftWidth) + parseFloat(estilo.borderRightWidth);
-      mirror.style.width = `${textarea.clientWidth - paddingH - borderH}px`;
+      const largura = textarea.clientWidth - paddingH - borderH;
+      if (larguraRef.current !== largura) {
+        larguraRef.current = largura;
+        mirror.style.width = `${largura}px`;
+        const novasLinhas = contarLinhas(texto, mirror);
+        setLinhas(novasLinhas);
+        setMensagemLimite(
+          novasLinhas > LINHAS_MAX
+            ? `Esta redação tem ${novasLinhas} linhas (limite de ${LINHAS_MAX}).`
+            : ""
+        );
+      }
     };
 
     const ro = new ResizeObserver(sincronizar);
     ro.observe(textarea);
     sincronizar();
     return () => ro.disconnect();
-  }, []);
+  }, [texto]);
 
   const palavras = useMemo(() => contarPalavras(texto), [texto]);
   const caracteres = useMemo(() => contarCaracteres(texto), [texto]);
@@ -161,7 +157,11 @@ export default function RedacaoEditor({
           <textarea
             ref={textareaRef}
             value={texto}
-            onChange={(e) => setTexto(e.target.value)}
+            id="redacao-texto"
+            onChange={(e) => {
+              digitandoRef.current = true;
+              setTexto(e.target.value);
+            }}
             spellCheck={false}
             placeholder="Comece a escrever sua redação aqui..."
             className="relative block w-full resize-none bg-transparent pl-12 pr-4 text-base text-slate-900 outline-none placeholder:text-slate-400"

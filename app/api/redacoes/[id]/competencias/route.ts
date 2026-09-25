@@ -15,7 +15,13 @@ type CompetenciasBody = {
 function validarCompetencias(competencias: CompetenciaInput[]) {
   if (competencias.length !== 5) return "Informe as cinco competências.";
 
-  const ids = competencias.map((item) => item.competencia).sort();
+  if (competencias.some((item) => !item || typeof item !== "object")) {
+    return "Cada competência deve conter competência, nota e observação.";
+  }
+
+  const ids = competencias
+    .map((item) => item.competencia)
+    .sort((a, b) => a - b);
   if (ids.join(",") !== "1,2,3,4,5") {
     return "As competências devem ser C1, C2, C3, C4 e C5.";
   }
@@ -23,6 +29,7 @@ function validarCompetencias(competencias: CompetenciaInput[]) {
   if (
     competencias.some(
       (item) =>
+        !Number.isInteger(item.competencia) ||
         !COMPETENCIAS_NOTAS_VALIDAS.includes(item.nota) ||
         typeof item.observacao !== "string"
     )
@@ -89,6 +96,19 @@ export async function DELETE(
     );
   }
 
+  const { error: erroNota } = await supabase
+    .from("redacoes")
+    .update({ nota_final: null, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (erroNota) {
+    console.error("Erro ao limpar nota final:", erroNota);
+    return NextResponse.json(
+      { erro: "Competências excluídas, mas não foi possível limpar a nota final." },
+      { status: 500 }
+    );
+  }
+
   return NextResponse.json({ sucesso: true });
 }
 
@@ -132,19 +152,6 @@ async function salvarCompetencias(
     );
   }
 
-  const { error: erroExclusao } = await supabase
-    .from("competencias")
-    .delete()
-    .eq("redacao_id", id);
-
-  if (erroExclusao) {
-    console.error("Erro ao substituir competências:", erroExclusao);
-    return NextResponse.json(
-      { erro: "Erro ao salvar competências." },
-      { status: 500 }
-    );
-  }
-
   const registros = competencias.map((item) => ({
     redacao_id: id,
     competencia: item.competencia,
@@ -155,7 +162,7 @@ async function salvarCompetencias(
 
   const { data, error } = await supabase
     .from("competencias")
-    .insert(registros)
+    .upsert(registros, { onConflict: "redacao_id,competencia" })
     .select("id, redacao_id, competencia, nota, observacao")
     .order("competencia", { ascending: true });
 

@@ -44,6 +44,7 @@ export default function Home() {
         await carregar();
       }
     } catch (error) {
+      setIdExcluir(null);
       setToast(
         error instanceof Error ? error.message : "Erro ao excluir redação."
       );
@@ -63,12 +64,20 @@ export default function Home() {
             Treine redações do ENEM e acompanhe sua evolução.
           </p>
         </div>
-        <Link
-          href="/redacoes/nova"
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
-        >
-          + Nova redação
-        </Link>
+        <nav className="flex flex-wrap gap-2">
+          <Link
+            href="/evolucao"
+            className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            Minha evolução
+          </Link>
+          <Link
+            href="/redacoes/nova"
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+          >
+            + Nova redação
+          </Link>
+        </nav>
       </header>
 
       {erro && (

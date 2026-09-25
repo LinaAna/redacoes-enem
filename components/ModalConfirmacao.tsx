@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 interface ModalConfirmacaoProps {
   aberto: boolean;
@@ -21,6 +21,17 @@ export default function ModalConfirmacao({
   onConfirmar,
   onCancelar,
 }: ModalConfirmacaoProps) {
+  const [confirmando, setConfirmando] = useState(false);
+
+  const confirmar = async () => {
+    setConfirmando(true);
+    try {
+      await onConfirmar();
+    } finally {
+      setConfirmando(false);
+    }
+  };
+
   // Fecha ao pressionar ESC
   useEffect(() => {
     if (!aberto) return;
@@ -52,10 +63,11 @@ export default function ModalConfirmacao({
             {textoCancelar}
           </button>
           <button
-            onClick={onConfirmar}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
+            onClick={() => void confirmar()}
+            disabled={confirmando}
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {textoConfirmar}
+            {confirmando ? "Excluindo..." : textoConfirmar}
           </button>
         </div>
       </div>

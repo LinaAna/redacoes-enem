@@ -35,6 +35,19 @@ export interface RedacaoCompleta extends Redacao {
   competencias: Competencia[];
 }
 
+export interface EstatisticasRedacoes {
+  totalRedacoes: number;
+  mediaGeral: number | null;
+  maiorNota: number | null;
+  mediasCompetencias: { competencia: number; media: number | null }[];
+  historico: {
+    id: string;
+    titulo: string;
+    data: string;
+    nota: number | null;
+  }[];
+}
+
 export const LINHAS_MAX = 30;
 export const ALTURA_LINHA_PX = 32;
 export const COMPETENCIAS_NOTAS_VALIDAS = [0, 40, 80, 120, 160, 200];
